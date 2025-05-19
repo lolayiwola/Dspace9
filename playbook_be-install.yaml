@@ -1,5 +1,5 @@
 ---
-- name: Install DSpace 7.6.1
+- name: Install DSpace 8.1
   hosts: hosts
   become: yes
 
@@ -9,22 +9,22 @@
         name: wget
         state: present
 
-    - name: Download DSpace 7.6.1 source code
+    - name: Download DSpace 8.1 source code
       ansible.builtin.get_url:
-        url: https://github.com/DSpace/DSpace/archive/refs/tags/dspace-7.6.1.tar.gz
-        dest: /opt/dspace-7.6.1.tar.gz
+        url: https://github.com/DSpace/DSpace/archive/refs/tags/dspace-8.1.tar.gz
+        dest: /opt/dspace-8.1.tar.gz
         mode: '0644'
 
-    - name: Extract DSpace 7.6.1 source code
+    - name: Extract DSpace 8.1 source code
       ansible.builtin.unarchive:
-        src: /opt/dspace-7.6.1.tar.gz
+        src: /opt/dspace-8.1.tar.gz
         dest: /opt
         remote_src: yes
 
     - name: Create initial local.cfg from the example
       ansible.builtin.copy:
-        src: /opt/DSpace-dspace-7.6.1/dspace/config/local.cfg.EXAMPLE
-        dest: /opt/DSpace-dspace-7.6.1/dspace/config/local.cfg
+        src: /opt/DSpace-dspace-8.1/dspace/config/local.cfg.EXAMPLE
+        dest: /opt/DSpace-dspace-8.1/dspace/config/local.cfg
         remote_src: yes
 
     - name: Create /dspace directory and assign ownership to tomcat
@@ -37,18 +37,18 @@
 
     - name: Change directory to dspace-source and package using Maven
       ansible.builtin.shell: |
-        cd /opt/DSpace-dspace-7.6.1
+        cd /opt/DSpace-dspace-8.1
         sudo mvn package
       args:
-        chdir: /opt/DSpace-dspace-7.6.1
+        chdir: /opt/DSpace-dspace-8.1
       become: true
 
     - name: Install DSpace using Ant fresh_install
       ansible.builtin.shell: |
-        cd /opt/DSpace-dspace-7.6.1/dspace/target/dspace-installer
+        cd /opt/DSpace-dspace-8.1/dspace/target/dspace-installer
         sudo ant fresh_install
       args:
-        chdir: /opt/DSpace-dspace-7.6.1/dspace/target/dspace-installer
+        chdir: /opt/DSpace-dspace-8.1/dspace/target/dspace-installer
       become: true
 
     - name: Initialize DSpace database
@@ -66,34 +66,6 @@
     #   args:
     #     chdir: /dspace/bin
     #   become: true
-
-    - name: Deploy DSpace webapps to Tomcat
-      ansible.builtin.copy:
-        src: /dspace/webapps/server/
-        dest: /var/lib/tomcat9/webapps/server
-        owner: tomcat
-        group: tomcat
-        mode: '0775'
-        remote_src: yes
-      become: true
-
-    - name: Check if the server directory exists
-      ansible.builtin.stat:
-        path: /var/lib/tomcat9/webapps/server
-      register: server_directory
-
-    - name: Fail if the server directory is not found
-      ansible.builtin.fail:
-        msg: "The server directory does not exist in /var/lib/tomcat9/webapps"
-      when: not server_directory.stat.exists
-
-    - name: Set ownership of all files in server directory to tomcat:tomcat
-      ansible.builtin.file:
-        path: /var/lib/tomcat9/webapps/server
-        owner: tomcat
-        group: tomcat
-        recurse: yes 
-      when: server_directory.stat.exists
     
     - name: Copy Solr cores to Solr configsets directory
       ansible.builtin.copy:
@@ -118,21 +90,15 @@
       args:
         chdir: /opt/solr8/bin
       become: true
+      
+ - name: Run the DSpace backend SpringBoot application
+      ansible.builtin.shell: |
+        nohup java -jar /dspace/webapps/server-boot.jar > /dspace/logs/server-boot.log 2>&1 &
+      args:
+        chdir: /dspace/webapps
+      become: true
 
-    - name: Add ReadWritePaths to tomcat9.service
-      lineinfile:
-        path: /lib/systemd/system/tomcat9.service
-        line: "{{ item }}"
-        create: yes
-        state: present
-      with_items:
-        - 'ReadWritePaths=/dspace'
-        - 'ReadWritePaths=/dspace/asseststore'
-
-
-
-
-
-
-
-
+    - name: Wait for server-boot to start up (grace period)
+      ansible.builtin.pause:
+        seconds: 30
+      when: server_boot_start_wait | default(true)
