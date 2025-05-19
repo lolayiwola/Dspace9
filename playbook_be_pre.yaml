@@ -1,0 +1,262 @@
+---
+- name: Install Java 17
+  hosts: all
+  become: yes
+
+  tasks:
+    - name: Update apt repository cache
+      apt:
+        update_cache: yes
+
+    - name: Install Java 17
+      apt:
+        name: openjdk-17-jdk
+        state: present
+
+    - name: Verify Java installation
+      command: java -version
+      register: java_version
+
+
+- name: Install Ant, Ant-Optional, and Maven
+  hosts: all
+  become: yes
+
+  tasks:
+    - name: Install Ant, Ant-Optional, and Maven
+      apt:
+        name:
+          - ant
+          - ant-optional
+          - maven
+        state: present
+        force_apt_get: yes
+
+
+- name: Install PostgreSQL 14 and configure repository
+  hosts: all
+  become: yes
+
+  tasks:
+    - name: Install PostgreSQL Common utilities
+      apt:
+        name: postgresql-common
+        state: present
+        update_cache: yes
+
+    - name: Ensure curl and ca-certificates are installed
+      apt:
+        name:
+          - curl
+          - ca-certificates
+        state: present
+
+    - name: Create directory for PostgreSQL signing key
+      file:
+        path: /usr/share/postgresql-common/pgdg
+        state: directory
+        mode: '0755'
+
+    - name: Download PostgreSQL signing key
+      get_url:
+        url: https://www.postgresql.org/media/keys/ACCC4CF8.asc
+        dest: /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc
+
+    - name: Add PostgreSQL APT repository
+      shell: echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list
+
+    - name: Update apt repository cache
+      apt:
+        update_cache: yes
+
+    - name: Install PostgreSQL 14, contrib, and JDBC driver
+      apt:
+        name:
+          - postgresql-14
+          - postgresql-contrib-14
+          - libpostgresql-jdbc-java
+        state: present
+        update_cache: yes
+
+
+
+- name: Configure PostgreSQL for DSpace
+  hosts: all
+  become: yes
+
+  tasks:
+    - name: Ensure listen_addresses is set to localhost in postgresql.conf
+      lineinfile:
+        path: /etc/postgresql/14/main/postgresql.conf
+        regexp: "^#?listen_addresses ="
+        line: "listen_addresses = 'localhost'"
+        state: present
+
+    - name: Add DSpace host configuration to pg_hba.conf
+      lineinfile:
+        path: /etc/postgresql/14/main/pg_hba.conf
+        line: "host    dspace       dspace      127.0.0.1/32         trust"
+        state: present
+
+    - name: Update ident, md5, and peer to trust in pg_hba.conf
+      replace:
+        path: /etc/postgresql/14/main/pg_hba.conf
+        regexp: "{{ item.search }}"
+        replace: "{{ item.replace }}"
+      loop:
+        - { search: 'ident', replace: 'trust' }
+        - { search: 'md5', replace: 'trust' }
+        - { search: 'peer', replace: 'trust' }
+
+    - name: Restart PostgreSQL after configuration changes
+      systemd:
+        name: postgresql
+        state: restarted
+
+    - name: Install psycopg2
+      apt:
+        name: python3-psycopg2
+        state: present
+      become: yes
+
+
+    - name: Create database user dspace
+      postgresql_user:
+        name: dspace
+        state: present
+        login_user: postgres
+
+    - name: Create database dspace with UNICODE encoding
+      postgresql_db:
+        name: dspace
+        encoding: UNICODE
+        owner: dspace
+        login_user: postgres
+
+    - name: Configure database - create pgcrypto extension and set privileges
+      postgresql_ext:
+        db: dspace
+        name: pgcrypto
+        state: present
+        login_user: postgres
+
+    - name: Alter dspace user password
+      postgresql_user:
+        name: dspace
+        password: dspace
+        state: present
+        login_user: postgres
+
+    - name: Change owner of the database to dspace
+      postgresql_db:
+        name: dspace
+        owner: dspace
+        login_user: postgres
+
+    - name: Grant all privileges on all tables in the public schema to dspace
+      postgresql_query:
+        query: "GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO dspace;"
+        db: dspace
+        login_user: postgres
+
+
+    - name: Restart PostgreSQL after database changes
+      systemd:
+        name: postgresql
+        state: restarted
+
+
+- name: Setup and start Solr 8.11.2
+  hosts: all
+  become: yes
+
+  tasks:
+    - name: Ensure the 'dspace' user exists
+      user:
+        name: dspace
+        home: /home/dspace   # Home directory
+        shell: /bin/sh       # Default shell
+        state: present       # Ensure the user exists
+        create_home: yes     # Creates the home directory if it doesn't exist
+
+    - name: Create /opt/solr8 directory
+      file:
+        path: /opt/solr8
+        state: directory
+        mode: '0755'
+        owner: dspace
+        group: dspace
+
+    - name: Download Solr 8.11.4
+      get_url:
+        url: https://www.apache.org/dyn/closer.lua/lucene/solr/8.11.4/solr-8.11.4.tgz?action=download
+        dest: /opt/solr8/solr-8.11.4.tgz
+
+    - name: Extract Solr 8.11.4
+      ansible.builtin.unarchive:
+        src: /opt/solr8/solr-8.11.4.tgz
+        dest: /opt/solr8/
+        remote_src: yes
+
+    - name: Copy all Solr files to /opt/solr8/
+      copy:
+        src: /opt/solr8/solr-8.11.4/
+        dest: /opt/solr8/
+        remote_src: yes
+        force: yes
+
+    - name: Ensure ownership of /opt/solr8 is set to dspace
+      file:
+        path: /opt/solr8
+        state: directory
+        owner: dspace
+        group: dspace
+        recurse: yes
+
+    - name: Start Solr
+      command: /opt/solr8/bin/solr start -force
+
+
+- name: Install and configure Tomcat 9
+  hosts: all
+  become: yes 
+
+  tasks:
+    - name: Install Tomcat 9
+      apt:
+        name: tomcat9
+        state: present
+        update_cache: yes
+
+    - name: Set JAVA_HOME and JAVA_OPTS in /etc/default/tomcat9
+      lineinfile:
+        path: /etc/default/tomcat9
+        regexp: '^JAVA_HOME='
+        line:  'JAVA_HOME="/usr/lib/jvm/java-17-openjdk-amd64"'
+        state: present
+
+    # - name: Set JAVA_OPTS in /etc/default/tomcat9
+    #   lineinfile:
+    #     path: /etc/default/tomcat9
+    #     regexp: '^JAVA_OPTS='
+    #     line: 'JAVA_OPTS="-Djava.awt.headless=true -Xmx2048m -Xms1024m -XX:MaxPermSize=1024m"'
+    #     state: present
+
+    - name: Update server.xml to configure the HTTP connector
+      lineinfile:
+        path: /etc/tomcat9/server.xml
+        regexp: '^\\s*<Connector port="8080"'
+        line: |
+          <Connector port="8080"
+                     minSpareThreads="25"
+                     enableLookups="false"
+                     redirectPort="8443"
+                     connectionTimeout="20000"
+                     disableUploadTimeout="true"
+                     URIEncoding="UTF-8"/>
+        state: present
+
+    - name: Restart Tomcat 9 service
+      service:
+        name: tomcat9
+        state: restarted

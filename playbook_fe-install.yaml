@@ -1,0 +1,102 @@
+---
+- name: Install DSpace 7.6.1
+  hosts: hosts
+  become: yes
+
+  tasks:
+    - name: Ensure wget is installed
+      apt:
+        name: wget
+        state: present
+
+    - name: Download DSpace 7.6.1 source code
+      ansible.builtin.get_url:
+        url: https://github.com/DSpace/dspace-angular/archive/refs/tags/dspace-7.6.1.tar.gz
+        dest: /opt/dspace-angular.tar.gz
+        mode: '0644'
+
+    - name: Extract DSpace 7.6.1 source code
+      ansible.builtin.unarchive:
+        src: /opt/dspace-angular.tar.gz
+        dest: /opt
+        remote_src: yes
+
+    - name: Ensure Yarn is installed
+      apt:
+        name: yarn
+        state: present
+
+    - name: Install dependencies using Yarn in dspace-angular
+      ansible.builtin.shell: |
+        yarn install --ignore-engines
+      args:
+        chdir: /opt/dspace-angular-dspace-7.6.1
+
+    - name: Change to dspace-angular directory and build
+      command: yarn build:prod
+      args:
+        chdir: /opt/dspace-angular-dspace-7.6.1
+
+    - name: Make a prod config file
+      command: cp config.example.yml config.prod.yml
+      args:
+        chdir: /opt/dspace-angular-dspace-7.6.1/config
+        creates: /opt/dspace-angular-dspace-7.6.1/config/config.prod.yml
+
+    - name: Update SSL, host, port, and namespace in config.prod.yml
+      replace:
+        path: /opt/dspace-angular-dspace-7.6.1/config/config.prod.yml
+        regexp: 'ssl: true'
+        replace: 'ssl: false'
+
+    - name: Update host in config.prod.yml
+      replace:
+        path: /opt/dspace-angular-dspace-7.6.1/config/config.prod.yml
+        regexp: 'host: demo\.dspace\.org'
+        replace: 'host: localhost'
+
+    - name: Update port in config.prod.yml
+      replace:
+        path: /opt/dspace-angular-dspace-7.6.1/config/config.prod.yml
+        regexp: 'port: 443'
+        replace: 'port: 8080'
+
+    - name: Move dspace-angular directory to root as dspace-frontend if it doesn't already exist
+      shell: mv /opt/dspace-angular-dspace-7.6.1 /dspace-frontend
+      args:
+        creates: /dspace-frontend
+
+    - name: Create PM2 JSON configuration file for DSpace UI
+      copy:
+        dest: /dspace-frontend/dspace-ui.json
+        content: |
+          {
+            "apps": [
+              {
+                "name": "dspace-ui",
+                "cwd": "/dspace-frontend",
+                "script": "dist/server/main.js",
+                "instances": "max",
+                "exec_mode": "cluster",
+                "env": {
+                  "NODE_ENV": "production"
+                }
+              }
+            ]
+          }
+        owner: tomcat
+        group: tomcat
+        mode: '0644'
+
+    - name: Change ownership of a directory and its contents
+      ansible.builtin.file:
+        path: /dspace-frontend
+        owner: tomcat
+        group: tomcat
+        recurse: yes
+
+    - name: Start PM2 application using dspace-ui.json
+      ansible.builtin.command:
+        cmd: pm2 start /dspace-frontend/dspace-ui.json
+
+

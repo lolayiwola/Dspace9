@@ -1,0 +1,55 @@
+---
+- name: Configure Apache and Certbot
+  hosts: hosts
+  become: yes
+  vars:
+    certbot_email: oluwatomiwa.olu-ajayi@eko-konnect.org.ng
+    certbot_domain: ekdspace03.cloud.ren.ng
+  tasks:
+    - name: Ensure Apache is installed
+      apt:
+        name: apache2
+        state: present
+        update_cache: yes
+    
+    - name: Enable Apache proxy module
+      command: a2enmod proxy
+      notify: restart apache
+    
+    - name: Enable Apache proxy_http module
+      command: a2enmod proxy_http
+      notify: restart apache
+    
+    - name: Enable Apache headers module
+      command: a2enmod headers
+      notify: restart apache
+    
+    - name: Install Certbot
+      apt:
+        name: python3-certbot-apache
+        state: present
+        update_cache: yes
+    
+    - name: Obtain SSL certificate via Certbot
+      command: certbot --apache --non-interactive --agree-tos --email {{ certbot_email }} -d {{ certbot_domain }}
+      when: ansible_distribution == "Ubuntu" 
+    
+    - name: Find Apache config files starting with 000
+      find:
+        paths: /etc/apache2/sites-available
+        patterns: '000*'
+      register: apache_files
+
+    - name: Uncomment and set ServerName in config files
+      lineinfile:
+        path: "{{ item.path }}"
+        regexp: '^#ServerName'
+        line: "ServerName {{ certbot_domain }}"
+      with_items: "{{ apache_files.files }}"
+      when: apache_files.matched > 0
+
+  handlers:
+    - name: restart apache
+      service:
+        name: apache2
+        state: restarted

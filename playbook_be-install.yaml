@@ -1,0 +1,138 @@
+---
+- name: Install DSpace 7.6.1
+  hosts: hosts
+  become: yes
+
+  tasks:
+    - name: Ensure wget is installed
+      apt:
+        name: wget
+        state: present
+
+    - name: Download DSpace 7.6.1 source code
+      ansible.builtin.get_url:
+        url: https://github.com/DSpace/DSpace/archive/refs/tags/dspace-7.6.1.tar.gz
+        dest: /opt/dspace-7.6.1.tar.gz
+        mode: '0644'
+
+    - name: Extract DSpace 7.6.1 source code
+      ansible.builtin.unarchive:
+        src: /opt/dspace-7.6.1.tar.gz
+        dest: /opt
+        remote_src: yes
+
+    - name: Create initial local.cfg from the example
+      ansible.builtin.copy:
+        src: /opt/DSpace-dspace-7.6.1/dspace/config/local.cfg.EXAMPLE
+        dest: /opt/DSpace-dspace-7.6.1/dspace/config/local.cfg
+        remote_src: yes
+
+    - name: Create /dspace directory and assign ownership to tomcat
+      ansible.builtin.file:
+        path: /dspace
+        state: directory
+        owner: tomcat
+        group: tomcat
+        mode: '0775'
+
+    - name: Change directory to dspace-source and package using Maven
+      ansible.builtin.shell: |
+        cd /opt/DSpace-dspace-7.6.1
+        sudo mvn package
+      args:
+        chdir: /opt/DSpace-dspace-7.6.1
+      become: true
+
+    - name: Install DSpace using Ant fresh_install
+      ansible.builtin.shell: |
+        cd /opt/DSpace-dspace-7.6.1/dspace/target/dspace-installer
+        sudo ant fresh_install
+      args:
+        chdir: /opt/DSpace-dspace-7.6.1/dspace/target/dspace-installer
+      become: true
+
+    - name: Initialize DSpace database
+      ansible.builtin.shell: |
+        cd /dspace/bin
+        sudo ./dspace database migrate
+      args:
+        chdir: /dspace/bin
+      become: true
+
+    # - name: Create DSpace admin account
+    #   ansible.builtin.shell: |
+    #     cd /dspace/bin
+    #     sudo ./dspace create-administrator
+    #   args:
+    #     chdir: /dspace/bin
+    #   become: true
+
+    - name: Deploy DSpace webapps to Tomcat
+      ansible.builtin.copy:
+        src: /dspace/webapps/server/
+        dest: /var/lib/tomcat9/webapps/server
+        owner: tomcat
+        group: tomcat
+        mode: '0775'
+        remote_src: yes
+      become: true
+
+    - name: Check if the server directory exists
+      ansible.builtin.stat:
+        path: /var/lib/tomcat9/webapps/server
+      register: server_directory
+
+    - name: Fail if the server directory is not found
+      ansible.builtin.fail:
+        msg: "The server directory does not exist in /var/lib/tomcat9/webapps"
+      when: not server_directory.stat.exists
+
+    - name: Set ownership of all files in server directory to tomcat:tomcat
+      ansible.builtin.file:
+        path: /var/lib/tomcat9/webapps/server
+        owner: tomcat
+        group: tomcat
+        recurse: yes 
+      when: server_directory.stat.exists
+    
+    - name: Copy Solr cores to Solr configsets directory
+      ansible.builtin.copy:
+        src: "/dspace/solr/"
+        dest: "/opt/solr8/server/solr/configsets"
+        owner: dspace
+        group: dspace
+        mode: '0775'
+        remote_src: yes
+      become: true
+
+    - name: Change ownership of the Solr configsets directory
+      ansible.builtin.file:
+        path: "/opt/solr/server/solr/configsets"
+        owner: dspace
+        group: dspace
+        recurse: yes
+      become: true
+
+    - name: Restart Solr service
+      ansible.builtin.shell: "./solr restart -force"
+      args:
+        chdir: /opt/solr8/bin
+      become: true
+
+    - name: Add ReadWritePaths to tomcat9.service
+      lineinfile:
+        path: /lib/systemd/system/tomcat9.service
+        line: "{{ item }}"
+        create: yes
+        state: present
+      with_items:
+        - 'ReadWritePaths=/dspace'
+        - 'ReadWritePaths=/dspace/asseststore'
+
+
+
+
+
+
+
+

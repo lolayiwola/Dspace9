@@ -1,0 +1,80 @@
+---
+- name: Install Node.js 18.x
+  hosts: all
+  become: yes 
+  tasks:
+    - name: Update apt package index
+      apt:
+        update_cache: yes
+
+    - name: Download NodeSource setup script for Node.js 18.x
+      get_url:
+        url: https://deb.nodesource.com/setup_18.x
+        dest: /tmp/nodesource_setup.sh
+        mode: '0755'
+
+    - name: Run NodeSource setup script
+      command: bash /tmp/nodesource_setup.sh
+
+    - name: Install Node.js
+      apt:
+        name: nodejs
+        state: present
+
+    - name: Verify Node.js installation
+      command: node -v
+      register: node_version
+
+    - name: Display Node.js version
+      debug:
+        msg: "Installed Node.js version: {{ node_version.stdout }}"
+
+    - name: Install PM2 globally using npm
+      npm:
+        name: pm2
+        global: yes
+        state: present
+      become: yes 
+
+    - name: Ensure curl is installed
+      apt:
+        name: curl
+        state: present
+        update_cache: yes
+
+    - name: Remove conflicting Yarn installations (cmdtest or existing yarn)
+      apt:
+        name: "{{ item }}"
+        state: absent
+      loop:
+        - cmdtest
+        - yarn
+
+    - name: Add Yarn's GPG key
+      apt_key:
+        url: https://dl.yarnpkg.com/debian/pubkey.gpg
+        state: present
+
+    - name: Add Yarn's APT repository to sources list
+      apt_repository:
+        repo: "deb https://dl.yarnpkg.com/debian/ stable main"
+        state: present
+        filename: yarn
+
+    - name: Update APT cache
+      apt:
+        update_cache: yes
+
+    - name: Install Yarn 1.x
+      apt:
+        name: yarn=1.*
+        state: present
+
+    - name: Verify Yarn installation
+      command: yarn --version
+      register: yarn_version
+
+    - name: Debug Yarn version
+      debug:
+        msg: "Yarn version installed: {{ yarn_version.stdout }}"
+
