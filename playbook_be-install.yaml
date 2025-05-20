@@ -91,7 +91,7 @@
         chdir: /opt/solr8/bin
       become: true
       
- - name: Run the DSpace backend SpringBoot application
+    - name: Run the DSpace backend SpringBoot application
       ansible.builtin.shell: |
         nohup java -jar /dspace/webapps/server-boot.jar > /dspace/logs/server-boot.log 2>&1 &
       args:
