@@ -1,5 +1,5 @@
-# DSpace-7.6_playbook
-This repository contains the ansible playbooks for installing DSpace v7.6 on a linux server
+# DSpace-8.1_playbook
+This repository contains the ansible playbooks for installing DSpace v8.1 on a linux server
 <a href="https://docs.ansible.com/ansible/latest/getting_started/index.html" target="_blank">Official Ansible documentation</a>
 
 
