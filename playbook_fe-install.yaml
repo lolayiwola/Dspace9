@@ -1,5 +1,5 @@
 ---
-- name: Install DSpace 7.6.1
+- name: Install DSpace 8.1
   hosts: hosts
   become: yes
 
@@ -9,13 +9,13 @@
         name: wget
         state: present
 
-    - name: Download DSpace 7.6.1 source code
+    - name: Download DSpace 8.1 source code
       ansible.builtin.get_url:
-        url: https://github.com/DSpace/dspace-angular/archive/refs/tags/dspace-7.6.1.tar.gz
+        url: https://github.com/DSpace/dspace-angular/archive/refs/tags/dspace-8.1.tar.gz
         dest: /opt/dspace-angular.tar.gz
         mode: '0644'
 
-    - name: Extract DSpace 7.6.1 source code
+    - name: Extract DSpace 8.1 source code
       ansible.builtin.unarchive:
         src: /opt/dspace-angular.tar.gz
         dest: /opt
@@ -30,39 +30,39 @@
       ansible.builtin.shell: |
         yarn install --ignore-engines
       args:
-        chdir: /opt/dspace-angular-dspace-7.6.1
+        chdir: /opt/dspace-angular-dspace-8.1
 
     - name: Change to dspace-angular directory and build
       command: yarn build:prod
       args:
-        chdir: /opt/dspace-angular-dspace-7.6.1
+        chdir: /opt/dspace-angular-dspace-8.1
 
     - name: Make a prod config file
       command: cp config.example.yml config.prod.yml
       args:
-        chdir: /opt/dspace-angular-dspace-7.6.1/config
-        creates: /opt/dspace-angular-dspace-7.6.1/config/config.prod.yml
+        chdir: /opt/dspace-angular-dspace-8.1/config
+        creates: /opt/dspace-angular-dspace-8.1/config/config.prod.yml
 
     - name: Update SSL, host, port, and namespace in config.prod.yml
       replace:
-        path: /opt/dspace-angular-dspace-7.6.1/config/config.prod.yml
+        path: /opt/dspace-angular-dspace-8.1/config/config.prod.yml
         regexp: 'ssl: true'
         replace: 'ssl: false'
 
     - name: Update host in config.prod.yml
       replace:
-        path: /opt/dspace-angular-dspace-7.6.1/config/config.prod.yml
+        path: /opt/dspace-angular-dspace-8.1/config/config.prod.yml
         regexp: 'host: demo\.dspace\.org'
         replace: 'host: localhost'
 
     - name: Update port in config.prod.yml
       replace:
-        path: /opt/dspace-angular-dspace-7.6.1/config/config.prod.yml
+        path: /opt/dspace-angular-dspace-8.1/config/config.prod.yml
         regexp: 'port: 443'
         replace: 'port: 8080'
 
     - name: Move dspace-angular directory to root as dspace-frontend if it doesn't already exist
-      shell: mv /opt/dspace-angular-dspace-7.6.1 /dspace-frontend
+      shell: mv /opt/dspace-angular-dspace-8.1 /dspace-frontend
       args:
         creates: /dspace-frontend
 
@@ -84,15 +84,15 @@
               }
             ]
           }
-        owner: tomcat
-        group: tomcat
+        owner: ola
+        group: ola
         mode: '0644'
 
     - name: Change ownership of a directory and its contents
       ansible.builtin.file:
         path: /dspace-frontend
-        owner: tomcat
-        group: tomcat
+        owner: ola
+        group: ola
         recurse: yes
 
     - name: Start PM2 application using dspace-ui.json
