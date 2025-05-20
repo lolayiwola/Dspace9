@@ -27,12 +27,12 @@
         dest: /opt/DSpace-dspace-8.1/dspace/config/local.cfg
         remote_src: yes
 
-    - name: Create /dspace directory and assign ownership to tomcat
+    - name: Create /dspace directory and assign ownership to dspace
       ansible.builtin.file:
         path: /dspace
         state: directory
-        owner: tomcat
-        group: tomcat
+        owner: dspace
+        group: dspace
         mode: '0775'
 
     - name: Change directory to dspace-source and package using Maven
