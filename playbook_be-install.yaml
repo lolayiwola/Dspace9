@@ -1,5 +1,5 @@
 ---
-- name: Install DSpace 8.1
+- name: Install DSpace 9.2
   hosts: hosts
   become: yes
 
@@ -9,22 +9,22 @@
         name: wget
         state: present
 
-    - name: Download DSpace 8.1 source code
+    - name: Download DSpace 9.1 source code
       ansible.builtin.get_url:
-        url: https://github.com/DSpace/DSpace/archive/refs/tags/dspace-8.1.tar.gz
-        dest: /opt/dspace-8.1.tar.gz
+        url: https://github.com/DSpace/DSpace/archive/refs/tags/dspace-9.1.tar.gz
+        dest: /opt/dspace-9.1.tar.gz
         mode: '0644'
 
-    - name: Extract DSpace 8.1 source code
+    - name: Extract DSpace 9.1 source code
       ansible.builtin.unarchive:
-        src: /opt/dspace-8.1.tar.gz
+        src: /opt/dspace-9.1.tar.gz
         dest: /opt
         remote_src: yes
 
     - name: Create initial local.cfg from the example
       ansible.builtin.copy:
-        src: /opt/DSpace-dspace-8.1/dspace/config/local.cfg.EXAMPLE
-        dest: /opt/DSpace-dspace-8.1/dspace/config/local.cfg
+        src: /opt/DSpace-dspace-9.1/dspace/config/local.cfg.EXAMPLE
+        dest: /opt/DSpace-dspace-9.1/dspace/config/local.cfg
         remote_src: yes
 
     - name: Create /dspace directory and assign ownership to dspace
@@ -37,18 +37,18 @@
 
     - name: Change directory to dspace-source and package using Maven
       ansible.builtin.shell: |
-        cd /opt/DSpace-dspace-8.1
+        cd /opt/DSpace-dspace-9.1
         sudo mvn package
       args:
-        chdir: /opt/DSpace-dspace-8.1
+        chdir: /opt/DSpace-dspace-9.1
       become: true
 
     - name: Install DSpace using Ant fresh_install
       ansible.builtin.shell: |
-        cd /opt/DSpace-dspace-8.1/dspace/target/dspace-installer
+        cd /opt/DSpace-dspace-9.1/dspace/target/dspace-installer
         sudo ant fresh_install
       args:
-        chdir: /opt/DSpace-dspace-8.1/dspace/target/dspace-installer
+        chdir: /opt/DSpace-dspace-9.1/dspace/target/dspace-installer
       become: true
 
     - name: Initialize DSpace database
@@ -70,7 +70,7 @@
     - name: Copy Solr cores to Solr configsets directory
       ansible.builtin.copy:
         src: "/dspace/solr/"
-        dest: "/opt/solr8/server/solr/configsets"
+        dest: "/opt/solr9/server/solr/configsets"
         owner: dspace
         group: dspace
         mode: '0775'
@@ -88,7 +88,7 @@
     - name: Restart Solr service
       ansible.builtin.shell: "./solr restart -force"
       args:
-        chdir: /opt/solr8/bin
+        chdir: /opt/solr9/bin
       become: true
       
     - name: Run the DSpace backend SpringBoot application
